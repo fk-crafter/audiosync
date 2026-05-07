@@ -1,23 +1,14 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { getSnippets } from '../server/snippets'
 
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute('/')({
+  component: SnippetsHome,
+  loader: async () => await getSnippets(),
+})
 
-const MOCK_SNIPPETS = [
-  {
-    id: '1',
-    title: 'Bouton Tailwind',
-    language: 'tsx',
-    code: '<button className="bg-lagoon text-white px-4 py-2 rounded-full">Click</button>',
-  },
-  {
-    id: '2',
-    title: 'Fetch API',
-    language: 'javascript',
-    code: 'const res = await fetch("/api/data");\nconst data = await res.json();',
-  },
-]
+function SnippetsHome() {
+  const snippets = Route.useLoaderData()
 
-function App() {
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
       <div className="flex items-center justify-between mb-8">
@@ -53,26 +44,32 @@ function App() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {MOCK_SNIPPETS.map((snippet) => (
-          <article
-            key={snippet.id}
-            className="island-shell flex flex-col rounded-2xl p-6"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-sea-ink">
-                {snippet.title}
-              </h2>
-              <span className="rounded-full bg-sand px-3 py-1 text-xs font-semibold uppercase tracking-wider text-palm">
-                {snippet.language}
-              </span>
-            </div>
-            <div className="mt-auto overflow-hidden rounded-xl bg-[#0f1a1e] p-4">
-              <pre className="overflow-x-auto text-sm text-[#afcdc8]">
-                <code>{snippet.code}</code>
-              </pre>
-            </div>
-          </article>
-        ))}
+        {snippets.length === 0 ? (
+          <p className="col-span-2 text-center py-10 text-sea-ink-soft">
+            Aucun snippet pour le moment. Clique sur le + pour en ajouter un !
+          </p>
+        ) : (
+          snippets.map((snippet) => (
+            <article
+              key={snippet.id}
+              className="island-shell flex flex-col rounded-2xl p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-sea-ink">
+                  {snippet.title}
+                </h2>
+                <span className="rounded-full bg-sand px-3 py-1 text-xs font-semibold uppercase tracking-wider text-palm">
+                  {snippet.language}
+                </span>
+              </div>
+              <div className="mt-auto overflow-hidden rounded-xl bg-[#0f1a1e] p-4">
+                <pre className="overflow-x-auto text-sm text-[#afcdc8]">
+                  <code>{snippet.code}</code>
+                </pre>
+              </div>
+            </article>
+          ))
+        )}
       </div>
     </main>
   )

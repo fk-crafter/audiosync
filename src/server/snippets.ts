@@ -9,7 +9,7 @@ type SnippetData = {
 const snippets = [
   {
     id: '1',
-    title: 'Bouton Tailwind',
+    title: 'Tailwind button',
     language: 'tsx',
     code: '<button className="bg-lagoon text-white px-4 py-2 rounded-full">Click</button>',
   },

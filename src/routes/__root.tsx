@@ -46,13 +46,13 @@ export const Route = createRootRoute({
           404
         </h1>
         <p className="mt-4 text-lg text-sea-ink-soft">
-          Cette page n'existe pas.
+          this page doesn't exist.
         </p>
         <a
           href="/"
           className="mt-8 inline-block px-6 py-3 bg-sea-ink text-white rounded-full no-underline hover:bg-lagoon-deep"
         >
-          Retour à l'accueil
+          back to home
         </a>
       </div>
     </div>

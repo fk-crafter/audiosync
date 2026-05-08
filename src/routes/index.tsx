@@ -4,6 +4,12 @@ import { getSnippets } from '../server/snippets'
 export const Route = createFileRoute('/')({
   component: SnippetsHome,
   loader: async () => await getSnippets(),
+  head: () => ({
+    meta: [
+      { title: 'My Snippets | TanStack Start' },
+      { name: 'description', content: 'Keep your best bits of code handy.' },
+    ],
+  }),
   pendingComponent: () => (
     <main className="page-wrap px-4 pb-8 pt-14 flex justify-center">
       <div className="island-shell rounded-full px-6 py-3 text-sea-ink-soft font-semibold animate-pulse">

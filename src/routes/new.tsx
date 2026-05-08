@@ -4,6 +4,15 @@ import { addSnippet } from '../server/snippets'
 
 export const Route = createFileRoute('/new')({
   component: NewSnippetForm,
+  head: () => ({
+    meta: [
+      { title: 'Add New Snippet | TanStack Start' },
+      {
+        name: 'description',
+        content: 'Create and save a new code snippet to your collection.',
+      },
+    ],
+  }),
 })
 
 function NewSnippetForm() {
@@ -54,7 +63,7 @@ function NewSnippetForm() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
             <label htmlFor="title" className="text-sm font-bold text-sea-ink">
-              Snippet title
+              Snippet Title
             </label>
             <input
               type="text"
@@ -62,7 +71,7 @@ function NewSnippetForm() {
               name="title"
               required
               placeholder="ex: Animated Tailwind Button"
-              className="rounded-xl border border-line bg-[#0f1a1e] text-[#afcdc8] px-4 py-3 text-sea-ink outline-none transition-colors focus:border-lagoon focus:bg-[#0f1a1e]"
+              className="rounded-xl border border-line bg-white/50 px-4 py-3 text-sea-ink outline-none transition-colors focus:border-lagoon focus:bg-white"
             />
           </div>
 
@@ -71,13 +80,13 @@ function NewSnippetForm() {
               htmlFor="language"
               className="text-sm font-bold text-sea-ink"
             >
-              Langage
+              Language
             </label>
             <select
               id="language"
               name="language"
               required
-              className="rounded-xl border border-line bg-[#0f1a1e] text-[#afcdc8] px-4 py-3 text-sea-ink outline-none transition-colors focus:border-lagoon focus:bg-[#0f1a1e] appearance-none"
+              className="rounded-xl border border-line bg-white/50 px-4 py-3 text-sea-ink outline-none transition-colors focus:border-lagoon focus:bg-white appearance-none"
             >
               <option value="tsx">React (TSX)</option>
               <option value="javascript">JavaScript</option>
@@ -89,7 +98,7 @@ function NewSnippetForm() {
 
           <div className="flex flex-col gap-2">
             <label htmlFor="code" className="text-sm font-bold text-sea-ink">
-              Your code
+              Your Code
             </label>
             <textarea
               id="code"
@@ -106,7 +115,7 @@ function NewSnippetForm() {
             disabled={isSubmitting}
             className="mt-2 rounded-full bg-sea-ink px-6 py-3.5 font-bold text-white transition-all hover:-translate-y-0.5 hover:bg-lagoon-deep hover:shadow-lg disabled:opacity-70 disabled:hover:translate-y-0"
           >
-            {isSubmitting ? 'Save...' : 'Save the snippet'}
+            {isSubmitting ? 'Saving...' : 'Save Snippet'}
           </button>
         </form>
       </section>

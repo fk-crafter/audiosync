@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { addSnippet } from '../server/snippets'
+import { addSnippet } from '../../server/snippets'
 
-export const Route = createFileRoute('/new')({
+export const Route = createFileRoute('/new/')({
   component: NewSnippetForm,
   head: () => ({
     meta: [

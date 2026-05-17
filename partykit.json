@@ -1,0 +1,6 @@
+{
+  "$schema": "https://partykit.io/schema.json",
+  "name": "audio-sync-server",
+  "main": "party/index.ts",
+  "compatibilityDate": "2026-05-17"
+}

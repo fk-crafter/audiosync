@@ -12,7 +12,7 @@ export function Chat({
   const [input, setInput] = useState('')
 
   const socket = usePartySocket({
-    host: 'localhost:1999',
+    host: 'audio-sync-server.fk-crafter.partykit.dev',
     room: roomId,
     onMessage(event) {
       const message = JSON.parse(event.data)

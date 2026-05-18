@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import usePartySocket from 'partysocket/react'
 
 export function Chat({
@@ -10,6 +10,7 @@ export function Chat({
 }) {
   const [messages, setMessages] = useState<{ user: string; text: string }[]>([])
   const [input, setInput] = useState('')
+  const listEndRef = useRef<HTMLDivElement>(null)
 
   const socket = usePartySocket({
     host: 'audio-sync-server.fk-crafter.partykit.dev',
@@ -21,7 +22,8 @@ export function Chat({
         message.type === 'audio-chunk' ||
         message.type === 'audio-chunk-start' ||
         message.type === 'audio-action' ||
-        message.type === 'audio-seek'
+        message.type === 'audio-seek' ||
+        message.type === 'audio-clear'
       ) {
         return
       }
@@ -29,6 +31,10 @@ export function Chat({
       setMessages((prev) => [...prev, message])
     },
   })
+
+  useEffect(() => {
+    listEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,6 +74,7 @@ export function Chat({
             </div>
           )
         })}
+        <div ref={listEndRef} />
       </div>
 
       <form

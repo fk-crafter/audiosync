@@ -7,7 +7,6 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   const [fileName, setFileName] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
-
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
 
@@ -58,6 +57,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       }
 
       if (message.type === 'audio-action' && audioRef.current) {
+        if (message.time !== undefined) {
+          audioRef.current.currentTime = message.time
+          setCurrentTime(message.time)
+        }
         if (message.action === 'play') {
           audioRef.current.play().catch(() => {})
           setIsPlaying(true)
@@ -71,6 +74,17 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         audioRef.current.currentTime = message.time
         setCurrentTime(message.time)
       }
+
+      if (message.type === 'audio-clear') {
+        setAudioSrc(null)
+        setFileName(null)
+        setIsPlaying(false)
+        setCurrentTime(0)
+        setDuration(0)
+        receivedChunksRef.current = []
+        totalChunksRef.current = 0
+        receivingFileNameRef.current = ''
+      }
     },
   })
 
@@ -80,7 +94,6 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         title: fileName || "Session d'écoute partagée",
         artist: 'En direct',
       })
-
       navigator.mediaSession.setActionHandler('play', () =>
         handlePlayPause(true),
       )
@@ -151,9 +164,27 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         JSON.stringify({
           type: 'audio-action',
           action: shouldPlay ? 'play' : 'pause',
+          time: audioRef.current.currentTime,
         }),
       )
     }
+  }
+
+  const handleClearAudio = () => {
+    setAudioSrc(null)
+    setFileName(null)
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
+    receivedChunksRef.current = []
+    totalChunksRef.current = 0
+    receivingFileNameRef.current = ''
+
+    socket.send(
+      JSON.stringify({
+        type: 'audio-clear',
+      }),
+    )
   }
 
   const handleTimeUpdate = () => {
@@ -227,9 +258,31 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
           </button>
 
           <div className="flex flex-col min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-white truncate">
-              {fileName || 'Aucun morceau chargé'}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-white truncate max-w-[180px]">
+                {fileName || 'Aucun morceau chargé'}
+              </h3>
+              {audioSrc && (
+                <button
+                  onClick={handleClearAudio}
+                  className="p-1 rounded-md text-zinc-400 hover:bg-[#202b36] hover:text-red-400 transition-colors"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
             <p className="text-xs text-zinc-400 mt-0.5">
               {downloadProgress !== null
                 ? `Synchronisation en cours...`

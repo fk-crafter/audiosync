@@ -1,7 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export function UsernameModal({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('')
+
+  useEffect(() => {
+    const savedName = localStorage.getItem('audiosync_username')
+    if (savedName) {
+      onJoin(savedName)
+    }
+  }, [onJoin])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0e1621]/80 backdrop-blur-md">
@@ -16,7 +23,10 @@ export function UsernameModal({ onJoin }: { onJoin: (name: string) => void }) {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              if (name.trim()) onJoin(name)
+              if (name.trim()) {
+                localStorage.setItem('audiosync_username', name.trim())
+                onJoin(name.trim())
+              }
             }}
             className="flex flex-col gap-4"
           >

@@ -52,7 +52,7 @@ function Home() {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Nom du salon (ex: soiree-rock)"
+                placeholder="Nom du salon"
                 className="w-full rounded-xl border border-[#243143] bg-[#202b36] py-4 px-5 text-center text-[16px] font-medium text-white placeholder-zinc-500 transition-all outline-none focus:border-purple-500 focus:bg-[#202b36] focus:ring-4 focus:ring-purple-500/10"
               />
             </div>

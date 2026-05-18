@@ -103,30 +103,36 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         setCurrentTime(0)
         setDuration(0)
 
-        const chunkSize = 32 * 1024
-        const totalChunks = Math.ceil(base64Src.length / chunkSize)
-
-        socket.send(
-          JSON.stringify({
-            type: 'audio-chunk-start',
-            name: file.name,
-            totalChunks,
-          }),
-        )
-
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * chunkSize
-          const end = start + chunkSize
-          const chunkData = base64Src.substring(start, end)
+        const sendAudioData = async () => {
+          const chunkSize = 32 * 1024
+          const totalChunks = Math.ceil(base64Src.length / chunkSize)
 
           socket.send(
             JSON.stringify({
-              type: 'audio-chunk',
-              index: i,
-              data: chunkData,
+              type: 'audio-chunk-start',
+              name: file.name,
+              totalChunks,
             }),
           )
+
+          for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize
+            const end = start + chunkSize
+            const chunkData = base64Src.substring(start, end)
+
+            socket.send(
+              JSON.stringify({
+                type: 'audio-chunk',
+                index: i,
+                data: chunkData,
+              }),
+            )
+
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
         }
+
+        sendAudioData()
       }
       reader.readAsDataURL(file)
     }

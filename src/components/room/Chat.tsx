@@ -17,7 +17,6 @@ export function Chat({
     onMessage(event) {
       const message = JSON.parse(event.data)
 
-      // On ajoute 'audio-seek' à la liste des messages ignorés par le chat
       if (
         message.type === 'audio-chunk' ||
         message.type === 'audio-chunk-start' ||
@@ -58,7 +57,7 @@ export function Chat({
                 </span>
               )}
               <div
-                className={`max-w-[75%] px-3.5 py-2 text-sm shadow-sm wrap-break-words relative ${
+                className={`max-w-[75%] px-3.5 py-2 text-[16px] shadow-sm wrap-break-words relative ${
                   isMe
                     ? 'bg-linear-to-br from-purple-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
                     : 'bg-[#202b36] border border-[#243143]/40 text-zinc-100 rounded-2xl rounded-tl-sm'
@@ -80,7 +79,7 @@ export function Chat({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Écrire un message..."
-          className="flex-1 rounded-xl border border-[#243143] bg-[#202b36] py-3 px-4 text-sm font-medium text-white placeholder-zinc-500 transition-all outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10"
+          className="flex-1 rounded-xl border border-[#243143] bg-[#202b36] py-3 px-4 text-[16px] font-medium text-white placeholder-zinc-500 transition-all outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10"
         />
         <button
           type="submit"

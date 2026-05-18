@@ -25,7 +25,7 @@ export function UsernameModal({ onJoin }: { onJoin: (name: string) => void }) {
               placeholder="Votre pseudonyme..."
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-[#243143] bg-[#202b36] p-3 text-sm font-medium text-white placeholder-zinc-500 transition-all outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10"
+              className="w-full rounded-xl border border-[#243143] bg-[#202b36] p-3 text-[16px] font-medium text-white placeholder-zinc-500 transition-all outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10"
               required
               maxLength={20}
             />

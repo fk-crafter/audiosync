@@ -20,13 +20,14 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
     onMessage(event) {
       const message = JSON.parse(event.data)
 
-      if (message.type === 'chat') return
-
       if (message.type === 'audio-chunk-start') {
         receivedChunksRef.current = []
         totalChunksRef.current = message.totalChunks
         receivingFileNameRef.current = message.name
-        setAudioSrc(null)
+        setAudioSrc((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return null
+        })
         setDownloadProgress(0)
         setCurrentTime(0)
         setDuration(0)
@@ -49,17 +50,31 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
           )
           const fullBase64 = sortedChunks.map((chunk) => chunk.data).join('')
 
-          setAudioSrc(fullBase64)
-          setFileName(receivingFileNameRef.current)
-          setIsPlaying(false)
-          setDownloadProgress(null)
+          fetch(fullBase64)
+            .then((res) => res.blob())
+            .then((blob) => {
+              const objectUrl = URL.createObjectURL(blob)
+              setAudioSrc(objectUrl)
+              setFileName(receivingFileNameRef.current)
+              setIsPlaying(false)
+              setDownloadProgress(null)
+
+              socket.send(
+                JSON.stringify({
+                  type: 'audio-request-sync',
+                }),
+              )
+            })
+            .catch(() => {})
         }
       }
 
       if (message.type === 'audio-action' && audioRef.current) {
         if (message.time !== undefined) {
-          audioRef.current.currentTime = message.time
-          setCurrentTime(message.time)
+          if (Math.abs(audioRef.current.currentTime - message.time) > 0.5) {
+            audioRef.current.currentTime = message.time
+            setCurrentTime(message.time)
+          }
         }
         if (message.action === 'play') {
           audioRef.current.play().catch(() => {})
@@ -76,7 +91,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       }
 
       if (message.type === 'audio-clear') {
-        setAudioSrc(null)
+        setAudioSrc((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return null
+        })
         setFileName(null)
         setIsPlaying(false)
         setCurrentTime(0)
@@ -87,6 +105,19 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       }
     },
   })
+
+  useEffect(() => {
+    const handleOpen = () => {
+      socket.send(JSON.stringify({ type: 'request-audio-state' }))
+    }
+
+    if (socket.readyState === 1) {
+      handleOpen()
+    } else {
+      socket.addEventListener('open', handleOpen)
+      return () => socket.removeEventListener('open', handleOpen)
+    }
+  }, [socket])
 
   useEffect(() => {
     if ('mediaSession' in navigator) {
@@ -106,46 +137,50 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      setAudioSrc((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      setFileName(file.name)
+      setIsPlaying(false)
+      setCurrentTime(0)
+      setDuration(0)
+      setDownloadProgress(0)
+
       const reader = new FileReader()
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const base64Src = event.target?.result as string
+        const chunkSize = 32 * 1024
+        const totalChunks = Math.ceil(base64Src.length / chunkSize)
 
-        setAudioSrc(base64Src)
-        setFileName(file.name)
-        setIsPlaying(false)
-        setCurrentTime(0)
-        setDuration(0)
+        socket.send(
+          JSON.stringify({
+            type: 'audio-chunk-start',
+            name: file.name,
+            totalChunks,
+          }),
+        )
 
-        const sendAudioData = async () => {
-          const chunkSize = 32 * 1024
-          const totalChunks = Math.ceil(base64Src.length / chunkSize)
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize
+          const end = start + chunkSize
+          const chunkData = base64Src.substring(start, end)
 
           socket.send(
             JSON.stringify({
-              type: 'audio-chunk-start',
-              name: file.name,
-              totalChunks,
+              type: 'audio-chunk',
+              index: i,
+              data: chunkData,
             }),
           )
 
-          for (let i = 0; i < totalChunks; i++) {
-            const start = i * chunkSize
-            const end = start + chunkSize
-            const chunkData = base64Src.substring(start, end)
-
-            socket.send(
-              JSON.stringify({
-                type: 'audio-chunk',
-                index: i,
-                data: chunkData,
-              }),
-            )
-
-            await new Promise((resolve) => setTimeout(resolve, 20))
-          }
+          setDownloadProgress(Math.round(((i + 1) / totalChunks) * 100))
+          await new Promise((resolve) => setTimeout(resolve, 20))
         }
 
-        sendAudioData()
+        const objectUrl = URL.createObjectURL(file)
+        setAudioSrc(objectUrl)
+        setDownloadProgress(null)
       }
       reader.readAsDataURL(file)
     }
@@ -171,7 +206,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   const handleClearAudio = () => {
-    setAudioSrc(null)
+    setAudioSrc((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
     setFileName(null)
     setIsPlaying(false)
     setCurrentTime(0)
@@ -201,14 +239,18 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value)
+    setCurrentTime(newTime)
     if (audioRef.current && audioSrc) {
       audioRef.current.currentTime = newTime
-      setCurrentTime(newTime)
+    }
+  }
 
+  const handleSeekEnd = () => {
+    if (audioRef.current && audioSrc) {
       socket.send(
         JSON.stringify({
           type: 'audio-seek',
-          time: newTime,
+          time: audioRef.current.currentTime,
         }),
       )
     }
@@ -259,7 +301,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
 
           <div className="flex flex-col min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-white truncate max-w-[180px]">
+              <h3 className="text-sm font-semibold text-white truncate max-w-45">
                 {fileName || 'Aucun morceau chargé'}
               </h3>
               {audioSrc && (
@@ -313,6 +355,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               max={duration || 0}
               value={currentTime}
               onChange={handleSeekChange}
+              onPointerUp={handleSeekEnd}
               className="w-full h-1 bg-[#202b36] rounded-lg appearance-none cursor-pointer accent-purple-500 focus:outline-none"
               style={{
                 background: `linear-gradient(to right, #a855f7 0%, #6366f1 ${

@@ -9,6 +9,7 @@ export function Chat({
   roomId: string
 }) {
   const [messages, setMessages] = useState<{ user: string; text: string }[]>([])
+  const [users, setUsers] = useState<string[]>([])
   const [input, setInput] = useState('')
   const listEndRef = useRef<HTMLDivElement>(null)
 
@@ -18,19 +19,28 @@ export function Chat({
     onMessage(event) {
       const message = JSON.parse(event.data)
 
-      if (
-        message.type === 'audio-chunk' ||
-        message.type === 'audio-chunk-start' ||
-        message.type === 'audio-action' ||
-        message.type === 'audio-seek' ||
-        message.type === 'audio-clear'
-      ) {
-        return
+      if (message.type === 'users-update') {
+        setUsers(message.users)
+      } else if (message.type === 'chat-history') {
+        setMessages(message.messages)
+      } else if (message.type === 'chat') {
+        setMessages((prev) => [...prev, message])
       }
-
-      setMessages((prev) => [...prev, message])
     },
   })
+
+  useEffect(() => {
+    const handleOpen = () => {
+      socket.send(JSON.stringify({ type: 'user-join', username }))
+    }
+
+    if (socket.readyState === 1) {
+      handleOpen()
+    } else {
+      socket.addEventListener('open', handleOpen)
+      return () => socket.removeEventListener('open', handleOpen)
+    }
+  }, [socket, username])
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -41,14 +51,21 @@ export function Chat({
     if (!input.trim()) return
 
     const newMessage = { type: 'chat', user: username, text: input }
-
-    setMessages((prev) => [...prev, { user: username, text: input }])
+    setMessages((prev) => [...prev, newMessage])
     socket.send(JSON.stringify(newMessage))
     setInput('')
   }
 
   return (
-    <div className="flex h-[500px] flex-col rounded-2xl border border-[#243143]/50 bg-[#17212b] overflow-hidden shadow-xl">
+    <div className="flex h-125 flex-col rounded-2xl border border-[#243143]/50 bg-[#17212b] overflow-hidden shadow-xl">
+      <div className="flex items-center gap-2 border-b border-[#243143]/50 bg-[#17212b] px-4 py-2.5 text-xs text-zinc-400">
+        <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+        <span className="font-medium">{users.length} personne(s) en ligne</span>
+        <span className="ml-auto text-zinc-500 truncate max-w-37.5">
+          {users.join(', ')}
+        </span>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0e1621]/30">
         {messages.map((msg, i) => {
           const isMe = msg.user === username

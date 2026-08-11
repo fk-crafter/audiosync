@@ -6,6 +6,12 @@ interface AudioState {
   chunks: { index: number; data: string }[]
   isPlaying: boolean
   currentTime: number
+  lastUpdateTime: number
+}
+
+interface ChatMessage {
+  user: string
+  text: string
 }
 
 export default class AudioSyncServer implements Party.Server {
@@ -15,58 +21,105 @@ export default class AudioSyncServer implements Party.Server {
     chunks: [],
     isPlaying: false,
     currentTime: 0,
+    lastUpdateTime: 0,
   }
+
+  users = new Map<string, string>()
+  chatHistory: ChatMessage[] = []
 
   constructor(readonly room: Party.Room) {}
 
-  onConnect(connection: Party.Connection) {
-    if (this.audioState.name) {
-      connection.send(
-        JSON.stringify({
-          type: 'audio-chunk-start',
-          name: this.audioState.name,
-          totalChunks: this.audioState.totalChunks,
-        }),
-      )
-
-      for (const chunk of this.audioState.chunks) {
-        connection.send(
-          JSON.stringify({
-            type: 'audio-chunk',
-            index: chunk.index,
-            data: chunk.data,
-          }),
-        )
-      }
-
-      connection.send(
-        JSON.stringify({
-          type: 'audio-action',
-          action: this.audioState.isPlaying ? 'play' : 'pause',
-          time: this.audioState.currentTime,
-        }),
-      )
+  onClose(connection: Party.Connection) {
+    if (this.users.has(connection.id)) {
+      this.users.delete(connection.id)
+      this.broadcastUsers()
     }
+  }
+
+  broadcastUsers() {
+    const uniqueUsers = Array.from(new Set(this.users.values()))
+    this.room.broadcast(
+      JSON.stringify({
+        type: 'users-update',
+        users: uniqueUsers,
+      }),
+    )
   }
 
   onMessage(message: string, sender: Party.Connection) {
     const data = JSON.parse(message)
 
-    if (data.type === 'audio-chunk-start') {
+    if (data.type === 'user-join') {
+      this.users.set(sender.id, data.username)
+      this.broadcastUsers()
+
+      sender.send(
+        JSON.stringify({
+          type: 'chat-history',
+          messages: this.chatHistory,
+        }),
+      )
+    } else if (data.type === 'request-audio-state') {
+      if (this.audioState.name) {
+        sender.send(
+          JSON.stringify({
+            type: 'audio-chunk-start',
+            name: this.audioState.name,
+            totalChunks: this.audioState.totalChunks,
+          }),
+        )
+
+        for (const chunk of this.audioState.chunks) {
+          sender.send(
+            JSON.stringify({
+              type: 'audio-chunk',
+              index: chunk.index,
+              data: chunk.data,
+            }),
+          )
+        }
+
+        let currentSyncTime = this.audioState.currentTime
+        if (this.audioState.isPlaying) {
+          currentSyncTime +=
+            (Date.now() - this.audioState.lastUpdateTime) / 1000
+        }
+
+        sender.send(
+          JSON.stringify({
+            type: 'audio-action',
+            action: this.audioState.isPlaying ? 'play' : 'pause',
+            time: currentSyncTime,
+          }),
+        )
+      }
+    } else if (data.type === 'chat') {
+      const chatMsg = { user: data.user, text: data.text }
+      this.chatHistory.push(chatMsg)
+      if (this.chatHistory.length > 100) this.chatHistory.shift()
+      this.room.broadcast(message, [sender.id])
+    } else if (data.type === 'audio-chunk-start') {
       this.audioState.name = data.name
       this.audioState.totalChunks = data.totalChunks
       this.audioState.chunks = []
       this.audioState.isPlaying = false
       this.audioState.currentTime = 0
+      this.audioState.lastUpdateTime = Date.now()
+      this.room.broadcast(message, [sender.id])
     } else if (data.type === 'audio-chunk') {
       this.audioState.chunks.push({ index: data.index, data: data.data })
+      this.room.broadcast(message, [sender.id])
     } else if (data.type === 'audio-action') {
       this.audioState.isPlaying = data.action === 'play'
       if (data.time !== undefined) {
         this.audioState.currentTime = data.time
       }
+      this.audioState.lastUpdateTime = Date.now()
+      this.room.broadcast(message, [sender.id])
     } else if (data.type === 'audio-seek') {
       this.audioState.currentTime = data.time
+      this.audioState.lastUpdateTime = Date.now()
+      this.room.broadcast(message, [sender.id])
     } else if (data.type === 'audio-clear') {
       this.audioState = {
         name: null,
@@ -74,9 +127,21 @@ export default class AudioSyncServer implements Party.Server {
         chunks: [],
         isPlaying: false,
         currentTime: 0,
+        lastUpdateTime: 0,
       }
+      this.room.broadcast(message, [sender.id])
+    } else if (data.type === 'audio-request-sync') {
+      let currentSyncTime = this.audioState.currentTime
+      if (this.audioState.isPlaying) {
+        currentSyncTime += (Date.now() - this.audioState.lastUpdateTime) / 1000
+      }
+      sender.send(
+        JSON.stringify({
+          type: 'audio-action',
+          action: this.audioState.isPlaying ? 'play' : 'pause',
+          time: currentSyncTime,
+        }),
+      )
     }
-
-    this.room.broadcast(message, [sender.id])
   }
 }

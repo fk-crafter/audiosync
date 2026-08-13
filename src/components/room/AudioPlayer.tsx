@@ -14,6 +14,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   const totalChunksRef = useRef<number>(0)
   const receivingFileNameRef = useRef<string>('')
 
+  // Nouveaux verrous de sécurité
+  const pendingSyncRef = useRef(false)
+  const isDraggingRef = useRef(false)
+
   const socket = usePartySocket({
     host: 'audio-sync-server.fk-crafter.partykit.dev',
     room: roomId,
@@ -31,6 +35,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         setDownloadProgress(0)
         setCurrentTime(0)
         setDuration(0)
+        pendingSyncRef.current = false
       }
 
       if (message.type === 'audio-chunk') {
@@ -58,6 +63,9 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
             const base64Data = fullBase64.includes(',')
               ? fullBase64.split(',')[1]
               : fullBase64
+            const mimeMatch = fullBase64.match(/data:([^;]+);/)
+            const mimeType = mimeMatch ? mimeMatch[1] : 'audio/mp3'
+
             const byteString = atob(base64Data)
             const byteArray = new Uint8Array(byteString.length)
 
@@ -65,19 +73,13 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               byteArray[i] = byteString.charCodeAt(i)
             }
 
-            const blob = new Blob([byteArray], { type: 'audio/mpeg' })
+            const blob = new Blob([byteArray], { type: mimeType })
             const objectUrl = URL.createObjectURL(blob)
 
+            pendingSyncRef.current = true // On marque qu'on voudra sync quand l'audio sera prêt
             setAudioSrc(objectUrl)
             setFileName(receivingFileNameRef.current)
-            setIsPlaying(false)
             setDownloadProgress(null)
-
-            socket.send(
-              JSON.stringify({
-                type: 'audio-request-sync',
-              }),
-            )
           } catch (error) {
             console.error(
               'Erreur de décodage audio, tentative de secours...',
@@ -87,16 +89,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               .then((res) => res.blob())
               .then((blob) => {
                 const objectUrl = URL.createObjectURL(blob)
+                pendingSyncRef.current = true
                 setAudioSrc(objectUrl)
                 setFileName(receivingFileNameRef.current)
-                setIsPlaying(false)
                 setDownloadProgress(null)
-
-                socket.send(
-                  JSON.stringify({
-                    type: 'audio-request-sync',
-                  }),
-                )
               })
               .catch(() => {})
           }
@@ -124,21 +120,27 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         if (message.time !== undefined) {
           if (Math.abs(audioRef.current.currentTime - message.time) > 0.5) {
             audioRef.current.currentTime = message.time
-            setCurrentTime(message.time)
+            if (!isDraggingRef.current) {
+              setCurrentTime(message.time)
+            }
           }
         }
         if (message.action === 'play') {
-          audioRef.current.play().catch(() => {})
-          setIsPlaying(true)
+          audioRef.current.play().catch(() => {
+            console.log(
+              "Autoplay bloqué par le navigateur : L'utilisateur doit interagir manuellement.",
+            )
+          })
         } else if (message.action === 'pause') {
           audioRef.current.pause()
-          setIsPlaying(false)
         }
       }
 
       if (message.type === 'audio-seek' && audioRef.current) {
         audioRef.current.currentTime = message.time
-        setCurrentTime(message.time)
+        if (!isDraggingRef.current) {
+          setCurrentTime(message.time)
+        }
       }
 
       if (message.type === 'audio-clear') {
@@ -153,6 +155,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         receivedChunksRef.current = []
         totalChunksRef.current = 0
         receivingFileNameRef.current = ''
+        pendingSyncRef.current = false
       }
     },
   })
@@ -193,10 +196,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         return null
       })
       setFileName(file.name)
-      setIsPlaying(false)
       setCurrentTime(0)
       setDuration(0)
       setDownloadProgress(0)
+      pendingSyncRef.current = false // L'uploader n'a pas besoin de resynchroniser son propre son
 
       const reader = new FileReader()
       reader.onload = async (event) => {
@@ -246,7 +249,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       } else {
         audioRef.current.pause()
       }
-      setIsPlaying(shouldPlay)
+      // L'état isPlaying sera mis à jour nativement par les onPlay/onPause de la balise <audio>
 
       socket.send(
         JSON.stringify({
@@ -264,7 +267,6 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       return null
     })
     setFileName(null)
-    setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
     receivedChunksRef.current = []
@@ -279,7 +281,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   const handleTimeUpdate = () => {
-    if (audioRef.current) {
+    if (audioRef.current && !isDraggingRef.current) {
       setCurrentTime(audioRef.current.currentTime)
     }
   }
@@ -288,6 +290,17 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
     if (audioRef.current) {
       setDuration(audioRef.current.duration)
     }
+  }
+
+  const handleCanPlay = () => {
+    if (pendingSyncRef.current) {
+      pendingSyncRef.current = false
+      socket.send(JSON.stringify({ type: 'audio-request-sync' }))
+    }
+  }
+
+  const handleSeekStart = () => {
+    isDraggingRef.current = true
   }
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,6 +312,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   const handleSeekEnd = () => {
+    isDraggingRef.current = false
     if (audioRef.current && audioSrc) {
       socket.send(
         JSON.stringify({
@@ -310,7 +324,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   const formatTime = (time: number) => {
-    if (isNaN(time)) return '0:00'
+    if (isNaN(time) || !isFinite(time)) return '0:00'
     const minutes = Math.floor(time / 60)
     const seconds = Math.floor(time % 60)
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`
@@ -407,6 +421,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               min="0"
               max={duration || 0}
               value={currentTime}
+              onPointerDown={handleSeekStart}
               onChange={handleSeekChange}
               onPointerUp={handleSeekEnd}
               className="w-full h-1 bg-[#202b36] rounded-lg appearance-none cursor-pointer accent-purple-500 focus:outline-none"
@@ -441,6 +456,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
           src={audioSrc}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
+          onCanPlay={handleCanPlay}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}

@@ -69,29 +69,44 @@ export default class AudioSyncServer implements Party.Server {
           }),
         )
 
-        for (const chunk of this.audioState.chunks) {
+        const sendChunksSlowly = async () => {
+          for (let i = 0; i < this.audioState.chunks.length; i++) {
+            const chunk = this.audioState.chunks[i]
+            sender.send(
+              JSON.stringify({
+                type: 'audio-chunk',
+                index: chunk.index,
+                data: chunk.data,
+              }),
+            )
+
+            if (i % 5 === 0) {
+              await new Promise((resolve) => setTimeout(resolve, 5))
+            }
+          }
+
           sender.send(
             JSON.stringify({
-              type: 'audio-chunk',
-              index: chunk.index,
-              data: chunk.data,
+              type: 'audio-transfer-complete',
+            }),
+          )
+
+          let currentSyncTime = this.audioState.currentTime
+          if (this.audioState.isPlaying) {
+            currentSyncTime +=
+              (Date.now() - this.audioState.lastUpdateTime) / 1000
+          }
+
+          sender.send(
+            JSON.stringify({
+              type: 'audio-action',
+              action: this.audioState.isPlaying ? 'play' : 'pause',
+              time: currentSyncTime,
             }),
           )
         }
 
-        let currentSyncTime = this.audioState.currentTime
-        if (this.audioState.isPlaying) {
-          currentSyncTime +=
-            (Date.now() - this.audioState.lastUpdateTime) / 1000
-        }
-
-        sender.send(
-          JSON.stringify({
-            type: 'audio-action',
-            action: this.audioState.isPlaying ? 'play' : 'pause',
-            time: currentSyncTime,
-          }),
-        )
+        sendChunksSlowly()
       }
     } else if (data.type === 'chat') {
       const chatMsg = { user: data.user, text: data.text }
@@ -109,6 +124,42 @@ export default class AudioSyncServer implements Party.Server {
     } else if (data.type === 'audio-chunk') {
       this.audioState.chunks.push({ index: data.index, data: data.data })
       this.room.broadcast(message, [sender.id])
+    } else if (data.type === 'audio-upload-complete') {
+      this.room.broadcast(
+        JSON.stringify({
+          type: 'audio-transfer-complete',
+        }),
+        [sender.id],
+      )
+    } else if (data.type === 'request-missing-chunks') {
+      const missingIndexes: number[] = data.indexes
+
+      const sendMissingSlowly = async () => {
+        for (let i = 0; i < missingIndexes.length; i++) {
+          const index = missingIndexes[i]
+          const chunk = this.audioState.chunks.find((c) => c.index === index)
+          if (chunk) {
+            sender.send(
+              JSON.stringify({
+                type: 'audio-chunk',
+                index: chunk.index,
+                data: chunk.data,
+              }),
+            )
+          }
+
+          if (i % 5 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 5))
+          }
+        }
+        sender.send(
+          JSON.stringify({
+            type: 'audio-transfer-complete',
+          }),
+        )
+      }
+
+      sendMissingSlowly()
     } else if (data.type === 'audio-action') {
       this.audioState.isPlaying = data.action === 'play'
       if (data.time !== undefined) {

@@ -34,38 +34,89 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       }
 
       if (message.type === 'audio-chunk') {
-        receivedChunksRef.current.push({
-          index: message.index,
-          data: message.data,
-        })
+        if (!receivedChunksRef.current.some((c) => c.index === message.index)) {
+          receivedChunksRef.current.push({
+            index: message.index,
+            data: message.data,
+          })
+        }
 
         const currentProgress = Math.round(
           (receivedChunksRef.current.length / totalChunksRef.current) * 100,
         )
         setDownloadProgress(currentProgress)
+      }
 
+      if (message.type === 'audio-transfer-complete') {
         if (receivedChunksRef.current.length === totalChunksRef.current) {
           const sortedChunks = receivedChunksRef.current.sort(
             (a, b) => a.index - b.index,
           )
           const fullBase64 = sortedChunks.map((chunk) => chunk.data).join('')
 
-          fetch(fullBase64)
-            .then((res) => res.blob())
-            .then((blob) => {
-              const objectUrl = URL.createObjectURL(blob)
-              setAudioSrc(objectUrl)
-              setFileName(receivingFileNameRef.current)
-              setIsPlaying(false)
-              setDownloadProgress(null)
+          try {
+            const base64Data = fullBase64.includes(',')
+              ? fullBase64.split(',')[1]
+              : fullBase64
+            const byteString = atob(base64Data)
+            const byteArray = new Uint8Array(byteString.length)
 
-              socket.send(
-                JSON.stringify({
-                  type: 'audio-request-sync',
-                }),
-              )
-            })
-            .catch(() => {})
+            for (let i = 0; i < byteString.length; i++) {
+              byteArray[i] = byteString.charCodeAt(i)
+            }
+
+            const blob = new Blob([byteArray], { type: 'audio/mpeg' })
+            const objectUrl = URL.createObjectURL(blob)
+
+            setAudioSrc(objectUrl)
+            setFileName(receivingFileNameRef.current)
+            setIsPlaying(false)
+            setDownloadProgress(null)
+
+            socket.send(
+              JSON.stringify({
+                type: 'audio-request-sync',
+              }),
+            )
+          } catch (error) {
+            console.error(
+              'Erreur de décodage audio, tentative de secours...',
+              error,
+            )
+            fetch(fullBase64)
+              .then((res) => res.blob())
+              .then((blob) => {
+                const objectUrl = URL.createObjectURL(blob)
+                setAudioSrc(objectUrl)
+                setFileName(receivingFileNameRef.current)
+                setIsPlaying(false)
+                setDownloadProgress(null)
+
+                socket.send(
+                  JSON.stringify({
+                    type: 'audio-request-sync',
+                  }),
+                )
+              })
+              .catch(() => {})
+          }
+        } else {
+          const receivedIndexes = new Set(
+            receivedChunksRef.current.map((c) => c.index),
+          )
+          const missing = []
+          for (let i = 0; i < totalChunksRef.current; i++) {
+            if (!receivedIndexes.has(i)) missing.push(i)
+          }
+
+          if (missing.length > 0) {
+            socket.send(
+              JSON.stringify({
+                type: 'request-missing-chunks',
+                indexes: missing,
+              }),
+            )
+          }
         }
       }
 
@@ -150,7 +201,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       const reader = new FileReader()
       reader.onload = async (event) => {
         const base64Src = event.target?.result as string
-        const chunkSize = 32 * 1024
+        const chunkSize = 256 * 1024
         const totalChunks = Math.ceil(base64Src.length / chunkSize)
 
         socket.send(
@@ -175,8 +226,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
           )
 
           setDownloadProgress(Math.round(((i + 1) / totalChunks) * 100))
-          await new Promise((resolve) => setTimeout(resolve, 20))
+          await new Promise((resolve) => setTimeout(resolve, 30))
         }
+
+        socket.send(JSON.stringify({ type: 'audio-upload-complete' }))
 
         const objectUrl = URL.createObjectURL(file)
         setAudioSrc(objectUrl)

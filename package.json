@@ -7,9 +7,9 @@
   },
   "scripts": {
     "dev": "partykit dev party/index.ts & vite dev --port 3000",
-    "build": "vite build",
+    "build": "vinxi build --preset vercel",
     "preview": "vite preview",
-    "start": "vite preview --host",
+    "start": "vinxi start",
     "test": "vitest run",
     "lint": "eslint",
     "format": "prettier --write . && eslint --fix",

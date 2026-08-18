@@ -6,155 +6,76 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   const [audioSrc, setAudioSrc] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
-  const receivedChunksRef = useRef<{ index: number; data: string }[]>([])
-  const totalChunksRef = useRef<number>(0)
-  const receivingFileNameRef = useRef<string>('')
-
-  // Nouveaux verrous de sécurité
   const pendingSyncRef = useRef(false)
   const isDraggingRef = useRef(false)
+  const lastSentProgressRef = useRef(0)
+
+  const PARTY_HOST = 'localhost:1999'
 
   const socket = usePartySocket({
-    host: 'audio-sync-server.fk-crafter.partykit.dev',
+    host: PARTY_HOST,
     room: roomId,
     onMessage(event) {
-      const message = JSON.parse(event.data)
+      const data = JSON.parse(event.data)
 
-      if (message.type === 'audio-chunk-start') {
-        receivedChunksRef.current = []
-        totalChunksRef.current = message.totalChunks
-        receivingFileNameRef.current = message.name
-        setAudioSrc((prev) => {
-          if (prev) URL.revokeObjectURL(prev)
-          return null
-        })
-        setDownloadProgress(0)
+      if (data.type === 'audio-upload-start') {
+        setFileName(data.name)
+        setIsUploading(true)
+        setUploadProgress(0)
+        setAudioSrc(null)
+      }
+
+      if (data.type === 'audio-upload-progress') {
+        setUploadProgress(data.progress)
+      }
+
+      if (data.type === 'audio-loaded') {
+        setAudioSrc(data.url)
+        setFileName(data.name)
         setCurrentTime(0)
         setDuration(0)
-        pendingSyncRef.current = false
+        setIsPlaying(false)
+        setIsUploading(false)
+        setUploadProgress(null)
+        pendingSyncRef.current = true
       }
 
-      if (message.type === 'audio-chunk') {
-        if (!receivedChunksRef.current.some((c) => c.index === message.index)) {
-          receivedChunksRef.current.push({
-            index: message.index,
-            data: message.data,
-          })
-        }
-
-        const currentProgress = Math.round(
-          (receivedChunksRef.current.length / totalChunksRef.current) * 100,
-        )
-        setDownloadProgress(currentProgress)
-      }
-
-      if (message.type === 'audio-transfer-complete') {
-        if (receivedChunksRef.current.length === totalChunksRef.current) {
-          const sortedChunks = receivedChunksRef.current.sort(
-            (a, b) => a.index - b.index,
-          )
-          const fullBase64 = sortedChunks.map((chunk) => chunk.data).join('')
-
-          try {
-            const base64Data = fullBase64.includes(',')
-              ? fullBase64.split(',')[1]
-              : fullBase64
-            const mimeMatch = fullBase64.match(/data:([^;]+);/)
-            const mimeType = mimeMatch ? mimeMatch[1] : 'audio/mp3'
-
-            const byteString = atob(base64Data)
-            const byteArray = new Uint8Array(byteString.length)
-
-            for (let i = 0; i < byteString.length; i++) {
-              byteArray[i] = byteString.charCodeAt(i)
-            }
-
-            const blob = new Blob([byteArray], { type: mimeType })
-            const objectUrl = URL.createObjectURL(blob)
-
-            pendingSyncRef.current = true // On marque qu'on voudra sync quand l'audio sera prêt
-            setAudioSrc(objectUrl)
-            setFileName(receivingFileNameRef.current)
-            setDownloadProgress(null)
-          } catch (error) {
-            console.error(
-              'Erreur de décodage audio, tentative de secours...',
-              error,
-            )
-            fetch(fullBase64)
-              .then((res) => res.blob())
-              .then((blob) => {
-                const objectUrl = URL.createObjectURL(blob)
-                pendingSyncRef.current = true
-                setAudioSrc(objectUrl)
-                setFileName(receivingFileNameRef.current)
-                setDownloadProgress(null)
-              })
-              .catch(() => {})
-          }
-        } else {
-          const receivedIndexes = new Set(
-            receivedChunksRef.current.map((c) => c.index),
-          )
-          const missing = []
-          for (let i = 0; i < totalChunksRef.current; i++) {
-            if (!receivedIndexes.has(i)) missing.push(i)
-          }
-
-          if (missing.length > 0) {
-            socket.send(
-              JSON.stringify({
-                type: 'request-missing-chunks',
-                indexes: missing,
-              }),
-            )
-          }
-        }
-      }
-
-      if (message.type === 'audio-action' && audioRef.current) {
-        if (message.time !== undefined) {
-          if (Math.abs(audioRef.current.currentTime - message.time) > 0.5) {
-            audioRef.current.currentTime = message.time
+      if (data.type === 'audio-action' && audioRef.current) {
+        if (data.time !== undefined) {
+          if (Math.abs(audioRef.current.currentTime - data.time) > 0.5) {
+            audioRef.current.currentTime = data.time
             if (!isDraggingRef.current) {
-              setCurrentTime(message.time)
+              setCurrentTime(data.time)
             }
           }
         }
-        if (message.action === 'play') {
-          audioRef.current.play().catch(() => {
-            console.log(
-              "Autoplay bloqué par le navigateur : L'utilisateur doit interagir manuellement.",
-            )
-          })
-        } else if (message.action === 'pause') {
+        if (data.action === 'play') {
+          audioRef.current.play().catch(() => {})
+        } else if (data.action === 'pause') {
           audioRef.current.pause()
         }
       }
 
-      if (message.type === 'audio-seek' && audioRef.current) {
-        audioRef.current.currentTime = message.time
+      if (data.type === 'audio-seek' && audioRef.current) {
+        audioRef.current.currentTime = data.time
         if (!isDraggingRef.current) {
-          setCurrentTime(message.time)
+          setCurrentTime(data.time)
         }
       }
 
-      if (message.type === 'audio-clear') {
-        setAudioSrc((prev) => {
-          if (prev) URL.revokeObjectURL(prev)
-          return null
-        })
+      if (data.type === 'audio-clear') {
+        setAudioSrc(null)
         setFileName(null)
         setIsPlaying(false)
         setCurrentTime(0)
         setDuration(0)
-        receivedChunksRef.current = []
-        totalChunksRef.current = 0
-        receivingFileNameRef.current = ''
+        setIsUploading(false)
+        setUploadProgress(null)
         pendingSyncRef.current = false
       }
     },
@@ -164,7 +85,6 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
     const handleOpen = () => {
       socket.send(JSON.stringify({ type: 'request-audio-state' }))
     }
-
     if (socket.readyState === 1) {
       handleOpen()
     } else {
@@ -173,84 +93,87 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
     }
   }, [socket])
 
-  useEffect(() => {
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: fileName || "Session d'écoute partagée",
-        artist: 'En direct',
-      })
-      navigator.mediaSession.setActionHandler('play', () =>
-        handlePlayPause(true),
-      )
-      navigator.mediaSession.setActionHandler('pause', () =>
-        handlePlayPause(false),
-      )
-    }
-  }, [fileName])
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      setAudioSrc((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return null
+    if (!file) return
+
+    setIsUploading(true)
+    setUploadProgress(0)
+    lastSentProgressRef.current = 0
+    socket.send(JSON.stringify({ type: 'audio-upload-start', name: file.name }))
+
+    try {
+      const data = await new Promise<{ url: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', `http://${PARTY_HOST}/parties/main/${roomId}`)
+        xhr.setRequestHeader('x-file-name', encodeURIComponent(file.name))
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round(
+              (event.loaded / event.total) * 100,
+            )
+            setUploadProgress(percentComplete)
+
+            if (
+              percentComplete >= lastSentProgressRef.current + 5 ||
+              percentComplete === 100
+            ) {
+              lastSentProgressRef.current = percentComplete
+              socket.send(
+                JSON.stringify({
+                  type: 'audio-upload-progress',
+                  progress: percentComplete,
+                }),
+              )
+            }
+          }
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText))
+          } else {
+            reject(new Error(xhr.responseText))
+          }
+        }
+
+        xhr.onerror = () => reject(new Error('Erreur réseau'))
+        xhr.send(file)
       })
+
+      setAudioSrc(data.url)
       setFileName(file.name)
       setCurrentTime(0)
       setDuration(0)
-      setDownloadProgress(0)
-      pendingSyncRef.current = false // L'uploader n'a pas besoin de resynchroniser son propre son
+      setIsPlaying(false)
+      setIsUploading(false)
+      setUploadProgress(null)
+      pendingSyncRef.current = true
 
-      const reader = new FileReader()
-      reader.onload = async (event) => {
-        const base64Src = event.target?.result as string
-        const chunkSize = 256 * 1024
-        const totalChunks = Math.ceil(base64Src.length / chunkSize)
-
-        socket.send(
-          JSON.stringify({
-            type: 'audio-chunk-start',
-            name: file.name,
-            totalChunks,
-          }),
-        )
-
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * chunkSize
-          const end = start + chunkSize
-          const chunkData = base64Src.substring(start, end)
-
-          socket.send(
-            JSON.stringify({
-              type: 'audio-chunk',
-              index: i,
-              data: chunkData,
-            }),
-          )
-
-          setDownloadProgress(Math.round(((i + 1) / totalChunks) * 100))
-          await new Promise((resolve) => setTimeout(resolve, 30))
-        }
-
-        socket.send(JSON.stringify({ type: 'audio-upload-complete' }))
-
-        const objectUrl = URL.createObjectURL(file)
-        setAudioSrc(objectUrl)
-        setDownloadProgress(null)
-      }
-      reader.readAsDataURL(file)
+      socket.send(
+        JSON.stringify({
+          type: 'audio-loaded',
+          name: file.name,
+          url: data.url,
+        }),
+      )
+    } catch (error) {
+      console.error('Erreur upload :', error)
+      setIsUploading(false)
+      setUploadProgress(null)
+      alert("Erreur lors de l'upload. Regarde la console de ton terminal.")
+    } finally {
+      e.target.value = ''
     }
   }
 
   const handlePlayPause = (shouldPlay: boolean) => {
     if (audioRef.current && audioSrc) {
-      if (shouldPlay) {
-        audioRef.current.play().catch(() => {})
-      } else {
-        audioRef.current.pause()
-      }
-      // L'état isPlaying sera mis à jour nativement par les onPlay/onPause de la balise <audio>
+      if (shouldPlay) audioRef.current.play().catch(() => {})
+      else audioRef.current.pause()
 
+      setIsPlaying(shouldPlay)
       socket.send(
         JSON.stringify({
           type: 'audio-action',
@@ -262,34 +185,21 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   const handleClearAudio = () => {
-    setAudioSrc((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return null
-    })
+    setAudioSrc(null)
     setFileName(null)
+    setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
-    receivedChunksRef.current = []
-    totalChunksRef.current = 0
-    receivingFileNameRef.current = ''
-
-    socket.send(
-      JSON.stringify({
-        type: 'audio-clear',
-      }),
-    )
+    socket.send(JSON.stringify({ type: 'audio-clear' }))
   }
 
   const handleTimeUpdate = () => {
-    if (audioRef.current && !isDraggingRef.current) {
+    if (audioRef.current && !isDraggingRef.current)
       setCurrentTime(audioRef.current.currentTime)
-    }
   }
 
   const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration)
-    }
+    if (audioRef.current) setDuration(audioRef.current.duration)
   }
 
   const handleCanPlay = () => {
@@ -306,9 +216,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value)
     setCurrentTime(newTime)
-    if (audioRef.current && audioSrc) {
-      audioRef.current.currentTime = newTime
-    }
+    if (audioRef.current && audioSrc) audioRef.current.currentTime = newTime
   }
 
   const handleSeekEnd = () => {
@@ -331,20 +239,24 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#243143]/50 bg-[#17212b] p-5 shadow-xl flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex flex-1 items-center gap-4 min-w-0">
+    <div className="relative overflow-hidden flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm md:gap-5 md:rounded-3xl md:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             onClick={() => handlePlayPause(!isPlaying)}
-            disabled={!audioSrc}
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white transition-all shadow-md ${
-              audioSrc
-                ? 'cursor-pointer bg-linear-to-tr from-purple-600 to-indigo-500 hover:brightness-110 active:scale-95'
-                : 'bg-[#202b36] text-zinc-600'
+            disabled={!audioSrc || isUploading}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all md:h-14 md:w-14 ${
+              audioSrc && !isUploading
+                ? 'cursor-pointer bg-zinc-900 text-white hover:bg-zinc-800 active:scale-95'
+                : 'bg-zinc-100 text-zinc-400'
             }`}
           >
             {isPlaying ? (
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="h-5 w-5 md:h-6 md:w-6"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   fillRule="evenodd"
                   d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25z"
@@ -353,7 +265,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               </svg>
             ) : (
               <svg
-                className="h-5 w-5 ml-0.5"
+                className="ml-0.5 h-5 w-5 md:ml-1 md:h-6 md:w-6"
                 fill="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -366,15 +278,15 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
             )}
           </button>
 
-          <div className="flex flex-col min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-white truncate max-w-45">
-                {fileName || 'Aucun morceau chargé'}
+              <h3 className="truncate text-sm font-semibold text-zinc-900 md:text-base">
+                {fileName || 'Aucun fichier sélectionné'}
               </h3>
-              {audioSrc && (
+              {audioSrc && !isUploading && (
                 <button
                   onClick={handleClearAudio}
-                  className="p-1 rounded-md text-zinc-400 hover:bg-[#202b36] hover:text-red-400 transition-colors"
+                  className="shrink-0 rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-500"
                 >
                   <svg
                     className="h-4 w-4"
@@ -392,30 +304,38 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
                 </button>
               )}
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              {downloadProgress !== null
-                ? `Synchronisation en cours...`
+            <p className="truncate mt-0.5 text-xs text-zinc-500">
+              {isUploading
+                ? `Synchronisation du fichier... ${uploadProgress !== null ? uploadProgress + '%' : ''}`
                 : audioSrc
-                  ? "Prêt pour l'écoute globale"
-                  : "En attente d'un fichier audio"}
+                  ? 'Prêt pour la lecture'
+                  : 'En attente...'}
             </p>
           </div>
         </div>
 
-        <label className="cursor-pointer shrink-0 rounded-xl bg-[#202b36] border border-[#243143] py-2.5 px-4 text-xs font-semibold text-purple-400 transition-all hover:bg-[#243143] hover:text-purple-300">
-          Uploader
+        <label
+          className={`shrink-0 cursor-pointer rounded-full px-3 py-2 text-xs font-medium transition-colors md:px-5 md:py-2.5 md:text-sm ${
+            isUploading
+              ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+              : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+          }`}
+        >
+          <span className="hidden sm:inline">Uploader un fichier</span>
+          <span className="sm:hidden">Uploader</span>
           <input
             type="file"
             accept="audio/mp3,audio/*"
             className="hidden"
             onChange={handleFileUpload}
+            disabled={isUploading}
           />
         </label>
       </div>
 
-      {audioSrc && (
-        <div className="flex flex-col gap-1 w-full mt-1">
-          <div className="relative w-full flex items-center">
+      {audioSrc && !isUploading && (
+        <div className="flex w-full flex-col gap-1.5 md:gap-2">
+          <div className="relative flex w-full items-center">
             <input
               type="range"
               min="0"
@@ -424,29 +344,18 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               onPointerDown={handleSeekStart}
               onChange={handleSeekChange}
               onPointerUp={handleSeekEnd}
-              className="w-full h-1 bg-[#202b36] rounded-lg appearance-none cursor-pointer accent-purple-500 focus:outline-none"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-100 accent-zinc-900 focus:outline-none"
               style={{
-                background: `linear-gradient(to right, #a855f7 0%, #6366f1 ${
+                background: `linear-gradient(to right, #18181b 0%, #18181b ${
                   duration ? (currentTime / duration) * 100 : 0
-                }%, #202b36 ${
-                  duration ? (currentTime / duration) * 100 : 0
-                }%, #202b36 100%)`,
+                }%, #f4f4f5 ${duration ? (currentTime / duration) * 100 : 0}%, #f4f4f5 100%)`,
               }}
             />
           </div>
-          <div className="flex justify-between items-center text-[11px] font-medium text-zinc-400 px-0.5 mt-1">
+          <div className="flex items-center justify-between px-0.5 text-[10px] font-medium text-zinc-400 md:text-xs">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
-        </div>
-      )}
-
-      {downloadProgress !== null && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#202b36]">
-          <div
-            className="h-full bg-linear-to-r from-purple-500 to-indigo-500 transition-all duration-300"
-            style={{ width: `${downloadProgress}%` }}
-          ></div>
         </div>
       )}
 
@@ -461,6 +370,15 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
           onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
         />
+      )}
+
+      {uploadProgress !== null && (
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-zinc-100">
+          <div
+            className="h-full bg-zinc-900 transition-all duration-300"
+            style={{ width: `${uploadProgress}%` }}
+          ></div>
+        </div>
       )}
     </div>
   )

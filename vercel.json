@@ -1,4 +1,18 @@
 {
-  "buildCommand": "pnpm build",
-  "outputDirectory": "dist"
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": ".output/server/index.mjs"
+    }
+  ]
 }

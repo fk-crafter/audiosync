@@ -15,11 +15,14 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   const isDraggingRef = useRef(false)
   const lastSentProgressRef = useRef(0)
 
-  const PARTY_HOST = 'localhost:1999'
+  const PARTY_HOST = import.meta.env.VITE_PARTYKIT_HOST || 'localhost:1999'
+  const isProd = import.meta.env.PROD
+  const protocol = isProd ? 'https' : 'http'
 
   const socket = usePartySocket({
     host: PARTY_HOST,
     room: roomId,
+    protocol: isProd ? 'wss' : 'ws',
     onMessage(event) {
       const data = JSON.parse(event.data)
 
@@ -105,7 +108,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
     try {
       const data = await new Promise<{ url: string }>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
-        xhr.open('POST', `http://${PARTY_HOST}/parties/main/${roomId}`)
+        xhr.open('POST', `${protocol}://${PARTY_HOST}/parties/main/${roomId}`)
         xhr.setRequestHeader('x-file-name', encodeURIComponent(file.name))
 
         xhr.upload.onprogress = (event) => {

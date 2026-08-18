@@ -20,9 +20,13 @@ export function Chat({
   const [input, setInput] = useState('')
   const listEndRef = useRef<HTMLDivElement>(null)
 
+  const PARTY_HOST = import.meta.env.VITE_PARTYKIT_HOST || 'localhost:1999'
+  const isProd = import.meta.env.PROD
+
   const socket = usePartySocket({
-    host: 'localhost:1999',
+    host: PARTY_HOST,
     room: roomId,
+    protocol: isProd ? 'wss' : 'ws',
     onMessage(event) {
       const data = JSON.parse(event.data)
 
@@ -86,7 +90,7 @@ export function Chat({
                 </span>
               )}
               <div
-                className={`relative max-w-[85%] wrap-break-word px-3.5 py-2 text-[14px] md:text-[15px] ${
+                className={`relative max-w-[85%] wrap-break-words px-3.5 py-2 text-[14px] md:text-[15px] ${
                   isMe
                     ? 'rounded-2xl rounded-tr-sm bg-zinc-900 text-white'
                     : 'rounded-2xl rounded-tl-sm bg-zinc-100 text-zinc-900'

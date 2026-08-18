@@ -242,7 +242,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
   }
 
   return (
-    <div className="relative overflow-hidden flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm md:gap-5 md:rounded-3xl md:p-6">
+    <div className="relative overflow-hidden flex flex-col gap-3 rounded-2xl border border-stone-700 bg-stone-800 p-3 shadow-lg md:gap-5 md:rounded-3xl md:p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
@@ -250,8 +250,8 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
             disabled={!audioSrc || isUploading}
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all md:h-14 md:w-14 ${
               audioSrc && !isUploading
-                ? 'cursor-pointer bg-zinc-900 text-white hover:bg-zinc-800 active:scale-95'
-                : 'bg-zinc-100 text-zinc-400'
+                ? 'cursor-pointer bg-stone-200 text-stone-900 shadow-md hover:bg-stone-100 active:scale-95'
+                : 'bg-stone-700 text-stone-500'
             }`}
           >
             {isPlaying ? (
@@ -283,13 +283,13 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
 
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex items-center gap-2">
-              <h3 className="truncate text-sm font-semibold text-zinc-900 md:text-base">
+              <h3 className="truncate text-sm font-semibold text-stone-100 md:text-base">
                 {fileName || 'Aucun fichier sélectionné'}
               </h3>
               {audioSrc && !isUploading && (
                 <button
                   onClick={handleClearAudio}
-                  className="shrink-0 rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-500"
+                  className="shrink-0 rounded-full p-1 text-stone-400 transition-colors hover:bg-stone-700 hover:text-red-400"
                 >
                   <svg
                     className="h-4 w-4"
@@ -307,7 +307,7 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
                 </button>
               )}
             </div>
-            <p className="truncate mt-0.5 text-xs text-zinc-500">
+            <p className="truncate mt-0.5 text-xs text-stone-300">
               {isUploading
                 ? `Synchronisation du fichier... ${uploadProgress !== null ? uploadProgress + '%' : ''}`
                 : audioSrc
@@ -320,8 +320,8 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         <label
           className={`shrink-0 cursor-pointer rounded-full px-3 py-2 text-xs font-medium transition-colors md:px-5 md:py-2.5 md:text-sm ${
             isUploading
-              ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-              : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+              ? 'bg-stone-700 text-stone-500 cursor-not-allowed'
+              : 'bg-stone-700 text-stone-200 hover:bg-stone-600'
           }`}
         >
           <span className="hidden sm:inline">Uploader un fichier</span>
@@ -347,15 +347,15 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
               onPointerDown={handleSeekStart}
               onChange={handleSeekChange}
               onPointerUp={handleSeekEnd}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-100 accent-zinc-900 focus:outline-none"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-stone-700 accent-stone-200 focus:outline-none"
               style={{
-                background: `linear-gradient(to right, #18181b 0%, #18181b ${
+                background: `linear-gradient(to right, #e7e5e4 0%, #e7e5e4 ${
                   duration ? (currentTime / duration) * 100 : 0
-                }%, #f4f4f5 ${duration ? (currentTime / duration) * 100 : 0}%, #f4f4f5 100%)`,
+                }%, #44403c ${duration ? (currentTime / duration) * 100 : 0}%, #44403c 100%)`,
               }}
             />
           </div>
-          <div className="flex items-center justify-between px-0.5 text-[10px] font-medium text-zinc-400 md:text-xs">
+          <div className="flex items-center justify-between px-0.5 text-[10px] font-medium text-stone-400 md:text-xs">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
@@ -376,9 +376,9 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
       )}
 
       {uploadProgress !== null && (
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-zinc-100">
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-stone-700">
           <div
-            className="h-full bg-zinc-900 transition-all duration-300"
+            className="h-full bg-stone-200 transition-all duration-300"
             style={{ width: `${uploadProgress}%` }}
           ></div>
         </div>

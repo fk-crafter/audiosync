@@ -65,13 +65,13 @@ export function Chat({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm md:rounded-3xl">
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 px-4 py-3">
-        <div className="flex h-2 w-2 shrink-0 rounded-full bg-green-500"></div>
-        <span className="shrink-0 text-xs font-medium text-zinc-900 md:text-sm">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-stone-700 bg-stone-800 shadow-lg md:rounded-3xl">
+      <div className="flex shrink-0 items-center gap-2 border-b border-stone-700 px-4 py-3">
+        <div className="flex h-2 w-2 shrink-0 rounded-full bg-emerald-400"></div>
+        <span className="shrink-0 text-xs font-medium text-stone-200 md:text-sm">
           {users.length} en ligne
         </span>
-        <span className="ml-auto truncate text-[11px] text-zinc-400 md:text-xs">
+        <span className="ml-auto truncate text-[11px] text-stone-400 md:text-xs">
           {users.join(', ')}
         </span>
       </div>
@@ -85,15 +85,15 @@ export function Chat({
               className={`flex w-full flex-col ${isMe ? 'items-end' : 'items-start'}`}
             >
               {!isMe && (
-                <span className="mb-0.5 ml-1 text-[11px] font-medium text-zinc-500">
+                <span className="mb-0.5 ml-1 text-[11px] font-medium text-stone-400">
                   {msg.user}
                 </span>
               )}
               <div
-                className={`relative max-w-[85%] wrap-break-words px-3.5 py-2 text-[14px] md:text-[15px] ${
+                className={`relative max-w-[85%] wrap-break-words px-3.5 py-2 text-[14px] shadow-sm md:text-[15px] ${
                   isMe
-                    ? 'rounded-2xl rounded-tr-sm bg-zinc-900 text-white'
-                    : 'rounded-2xl rounded-tl-sm bg-zinc-100 text-zinc-900'
+                    ? 'rounded-2xl rounded-tr-sm bg-stone-200 text-stone-900 font-medium'
+                    : 'rounded-2xl rounded-tl-sm bg-stone-700 text-stone-100'
                 }`}
               >
                 {msg.text}
@@ -106,20 +106,20 @@ export function Chat({
 
       <form
         onSubmit={sendMessage}
-        className="shrink-0 border-t border-zinc-100 p-2 md:p-3"
+        className="shrink-0 border-t border-stone-700 p-2 md:p-3"
       >
-        <div className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 p-1 pl-3 transition-all focus-within:border-zinc-400 focus-within:ring-4 focus-within:ring-zinc-100 md:p-1.5 md:pl-4">
+        <div className="flex items-center gap-2 rounded-full border border-stone-700 bg-stone-900 p-1 pl-3 transition-all focus-within:border-stone-500 focus-within:ring-4 focus-within:ring-stone-700/50 md:p-1.5 md:pl-4">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Message..."
-            className="flex-1 bg-transparent text-[16px] text-zinc-900 outline-none placeholder:text-zinc-400"
+            className="flex-1 bg-transparent text-[16px] text-stone-100 outline-none placeholder:text-stone-500"
           />
           <button
             type="submit"
             disabled={!input.trim()}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition-all hover:bg-zinc-800 disabled:opacity-0 active:scale-95 md:h-9 md:w-9"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-200 text-stone-900 transition-all hover:bg-stone-100 disabled:opacity-0 active:scale-95 md:h-9 md:w-9"
           >
             <svg
               className="mr-0.5 mt-0.5 h-3.5 w-3.5 rotate-45 md:h-4 md:w-4"

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "partykit dev party/index.ts & vite dev --port 3000",
-    "build": "vinxi build",
+    "build": "vite build",
     "preview": "vite preview",
     "start": "vite preview --host",
     "test": "vitest run",

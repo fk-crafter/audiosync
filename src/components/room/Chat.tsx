@@ -122,7 +122,7 @@ export function Chat({
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-200 text-stone-900 transition-all hover:bg-stone-100 disabled:opacity-0 active:scale-95 md:h-9 md:w-9"
           >
             <svg
-              className="mr-0.5 mt-0.5 h-3.5 w-3.5 rotate-45 md:h-4 md:w-4"
+              className="ml-0.5 mb-0.5 h-3.5 w-3.5 -rotate-45 md:h-4 md:w-4"
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"

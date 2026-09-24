@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import usePartySocket from 'partysocket/react'
-import { PartySocket } from 'partysocket'
 import { createClient } from '@supabase/supabase-js'
 import {
   Play,
@@ -359,16 +358,16 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
     setTimeout(() => setIsSyncing(false), 800)
   }
 
-  // File upload handler (supports up to 1000 Mo)
+  // File upload handler (Supabase cloud storage)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // 1. Validate file size (up to 1000 Mo / 1 Go)
-    const MAX_SIZE = 1000 * 1024 * 1024
+    // Validate file size (Supabase Free tier limit: 50MB)
+    const MAX_SIZE = 50 * 1024 * 1024
     if (file.size > MAX_SIZE) {
       setErrorMessage(
-        `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). La taille maximale est de 1000 Mo.`,
+        `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). La limite est de 50 Mo pour le partage en ligne. Compressez-le en MP3 (ex: via FreeConvert ou CloudConvert) pour l'importer.`,
       )
       e.target.value = ''
       return
@@ -388,64 +387,24 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
 
     try {
       const mimeType = file.type || getAudioMimeType(file.name)
-      let url: string | null = null
+      const uniqueName = sanitizeFileName(file.name)
 
-      // If file is <= 50MB, try cloud storage (Supabase) first
-      if (file.size <= 50 * 1024 * 1024) {
-        try {
-          const uniqueName = sanitizeFileName(file.name)
-          const { error: supabaseError } = await supabase.storage
-            .from('audios')
-            .upload(uniqueName, file, {
-              contentType: mimeType,
-              upsert: true,
-            })
+      const { error: supabaseError } = await supabase.storage
+        .from('audios')
+        .upload(uniqueName, file, {
+          contentType: mimeType,
+          upsert: true,
+        })
 
-          if (!supabaseError) {
-            const { data: publicUrlData } = supabase.storage
-              .from('audios')
-              .getPublicUrl(uniqueName)
-            url = publicUrlData.publicUrl
-          } else {
-            console.warn('Supabase storage error, falling back to PartyKit:', supabaseError)
-          }
-        } catch (sbErr) {
-          console.warn('Supabase upload exception, falling back to PartyKit:', sbErr)
-        }
+      if (supabaseError) {
+        throw supabaseError
       }
 
-      // If file is > 50MB (or if Supabase failed/unavailable), upload directly to PartyKit server
-      if (!url) {
-        const res = await PartySocket.fetch(
-          {
-            host: PARTY_HOST,
-            room: roomId,
-            protocol: isProd ? 'https' : 'http',
-          },
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': mimeType,
-              'x-file-name': encodeURIComponent(file.name),
-            },
-            body: file,
-          },
-        )
+      const { data: publicUrlData } = supabase.storage
+        .from('audios')
+        .getPublicUrl(uniqueName)
 
-        if (!res.ok) {
-          const errData = (await res.json().catch(() => ({}))) as {
-            error?: string
-          }
-          throw new Error(errData.error || `Erreur serveur (${res.status})`)
-        }
-
-        const data = (await res.json()) as { url?: string }
-        url = data.url || null
-      }
-
-      if (!url) {
-        throw new Error("Impossible d'obtenir le lien de l'audio")
-      }
+      const url = publicUrlData.publicUrl
 
       setAudioSrc(url)
       setIsUploading(false)
@@ -458,10 +417,10 @@ export function AudioPlayer({ roomId }: { roomId: string }) {
         }),
       )
     } catch (error: unknown) {
-      console.error('Erreur upload audio:', error)
+      console.error('Erreur upload audio Supabase:', error)
       const msg =
-        error instanceof Error ? error.message : "Échec de l'envoi de l'audio"
-      setErrorMessage(`Erreur d'upload: ${msg}`)
+        error instanceof Error ? error.message : "Échec de l'envoi vers Supabase"
+      setErrorMessage(`Erreur d'upload : ${msg}`)
       setIsUploading(false)
       setFileName(null)
 

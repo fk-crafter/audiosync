@@ -24,6 +24,7 @@ export function Chat({
   const [users, setUsers] = useState<string[]>([])
   const [input, setInput] = useState('')
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
 
   const [isGifOpen, setIsGifOpen] = useState(false)
   const [gifSearch, setGifSearch] = useState('')
@@ -41,14 +42,22 @@ export function Chat({
     room: roomId,
     protocol: isProd ? 'wss' : 'ws',
     onMessage(event) {
-      const data = JSON.parse(event.data)
+      try {
+        const data = JSON.parse(event.data)
 
-      if (data.type === 'users-update') {
-        setUsers(data.users)
-      } else if (data.type === 'chat-history') {
-        setMessages(data.messages)
-      } else if (data.type === 'chat') {
-        setMessages((prev) => [...prev, data.message])
+        if (data.type === 'users-update') {
+          if (Array.isArray(data.users)) {
+            setUsers(data.users)
+          }
+        } else if (data.type === 'chat-history') {
+          if (Array.isArray(data.messages)) {
+            setMessages(data.messages)
+          }
+        } else if (data.type === 'chat' && data.message) {
+          setMessages((prev) => [...prev, data.message])
+        }
+      } catch (err) {
+        console.error('Error handling chat socket message:', err)
       }
     },
   })
@@ -82,8 +91,8 @@ export function Chat({
         }
 
         const url = gifSearch.trim()
-          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifSearch)}&limit=12&rating=g`
-          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=12&rating=g`
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifSearch)}&limit=16&rating=g`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=16&rating=g`
 
         const res = await fetch(url)
         const data = await res.json()
@@ -94,6 +103,7 @@ export function Chat({
           setGifs([])
         }
       } catch (err) {
+        console.error('GIF fetch error:', err)
         setGifs([])
       } finally {
         setIsSearchingGifs(false)
@@ -102,7 +112,7 @@ export function Chat({
 
     const timer = setTimeout(() => {
       fetchGifs()
-    }, 500)
+    }, 400)
 
     return () => clearTimeout(timer)
   }, [isGifOpen, gifSearch])
@@ -144,27 +154,43 @@ export function Chat({
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (file.size > 10 * 1024 * 1024) {
+      setImageError("L'image ne doit pas dépasser 10 Mo")
+      setTimeout(() => setImageError(null), 4000)
+      e.target.value = ''
+      return
+    }
+
     setIsUploadingImage(true)
+    setImageError(null)
+
     try {
-      const uniqueName = `chat/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+      const ext = file.name.split('.').pop() || 'png'
+      const uniqueName = `chat/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}.${ext}`
       const { error } = await supabase.storage
         .from('audios')
-        .upload(uniqueName, file)
+        .upload(uniqueName, file, {
+          contentType: file.type || 'image/jpeg',
+          upsert: true,
+        })
 
-      if (!error) {
-        const { data } = supabase.storage
-          .from('audios')
-          .getPublicUrl(uniqueName)
-        socket.send(
-          JSON.stringify({
-            type: 'chat',
-            user: username,
-            text: `__IMG__::${data.publicUrl}`,
-          }),
-        )
-      }
-    } catch (err) {
-      console.error(err)
+      if (error) throw error
+
+      const { data } = supabase.storage
+        .from('audios')
+        .getPublicUrl(uniqueName)
+
+      socket.send(
+        JSON.stringify({
+          type: 'chat',
+          user: username,
+          text: `__IMG__::${data.publicUrl}`,
+        }),
+      )
+    } catch (err: any) {
+      console.error('Image upload failed:', err)
+      setImageError("Erreur lors de l'envoi de l'image")
+      setTimeout(() => setImageError(null), 4000)
     } finally {
       setIsUploadingImage(false)
       e.target.value = ''
@@ -176,14 +202,27 @@ export function Chat({
       <div className="flex shrink-0 items-center gap-2 border-b border-stone-700 px-4 py-3">
         <div className="flex h-2 w-2 shrink-0 rounded-full bg-emerald-400"></div>
         <span className="shrink-0 text-xs font-medium text-stone-200 md:text-sm">
-          {users.length} en ligne
+          {users.length} {users.length > 1 ? 'connectés' : 'en ligne'}
         </span>
         <span className="ml-auto truncate text-[11px] text-stone-400 md:text-xs">
           {users.join(', ')}
         </span>
       </div>
 
+      {imageError && (
+        <div className="bg-rose-500/20 px-3 py-1.5 text-center text-xs text-rose-300">
+          {imageError}
+        </div>
+      )}
+
       <div className="flex-1 space-y-4 overflow-y-auto p-3 md:p-4">
+        {messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center text-center text-stone-500 text-xs md:text-sm">
+            <span>Aucun message pour le moment</span>
+            <span className="text-[11px] text-stone-600 mt-1">Dites bonjour ou partagez un son !</span>
+          </div>
+        )}
+
         {messages.map((msg) => {
           const isMe = msg.user === username
           const isImage = msg.text.startsWith('__IMG__::')
@@ -201,7 +240,7 @@ export function Chat({
                 </span>
               )}
               <div
-                className={`relative max-w-[85%] wrap-break-words px-3.5 py-2 text-[14px] shadow-sm md:text-[15px] ${
+                className={`relative max-w-[85%] break-words [overflow-wrap:anywhere] px-3.5 py-2 text-[14px] shadow-sm md:text-[15px] ${
                   isMe
                     ? 'rounded-2xl rounded-tr-sm bg-stone-200 text-stone-900 font-medium'
                     : 'rounded-2xl rounded-tl-sm bg-stone-700 text-stone-100'
@@ -280,7 +319,7 @@ export function Chat({
               onClick={() => setIsGifOpen(!isGifOpen)}
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all md:h-9 md:w-9 ${isGifOpen ? 'bg-stone-700 text-stone-200' : 'text-stone-400 hover:bg-stone-800 hover:text-stone-200'}`}
             >
-              <div className="flex items-center justify-center rounded border-[1.5px] border-current px-0.75 py-px text-[9px] font-bold tracking-wider">
+              <div className="flex items-center justify-center rounded border-[1.5px] border-current px-1 py-px text-[9px] font-bold tracking-wider">
                 GIF
               </div>
             </button>

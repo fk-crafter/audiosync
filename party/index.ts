@@ -29,6 +29,9 @@ export default class AudioSyncServer implements Party.Server {
   users = new Map<string, string>()
   chatHistory: ChatMessage[] = []
   heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  audioBuffer: ArrayBuffer | null = null
+  audioMimeType = 'audio/mpeg'
+  audioFileName = 'audio.mp3'
 
   constructor(readonly room: Party.Room) {}
 
@@ -85,6 +88,8 @@ export default class AudioSyncServer implements Party.Server {
   }
 
   async onRequest(req: Party.Request) {
+    const url = new URL(req.url)
+
     if (req.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -92,6 +97,85 @@ export default class AudioSyncServer implements Party.Server {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
           'Access-Control-Allow-Headers': '*',
+        },
+      })
+    }
+
+    if (req.method === 'POST') {
+      try {
+        const fileName = req.headers.get('x-file-name') || 'audio.mp3'
+        const contentType = req.headers.get('content-type') || 'audio/mpeg'
+        this.audioBuffer = await req.arrayBuffer()
+        this.audioMimeType = contentType
+        this.audioFileName = decodeURIComponent(fileName)
+
+        return new Response(
+          JSON.stringify({
+            status: 'ok',
+            url: `${url.origin}${url.pathname}?stream=1`,
+            name: this.audioFileName,
+            size: this.audioBuffer.byteLength,
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          },
+        )
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Erreur upload serveur'
+        return new Response(JSON.stringify({ error: message }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        })
+      }
+    }
+
+    if (
+      url.searchParams.get('stream') === '1' ||
+      url.pathname.endsWith('/audio')
+    ) {
+      if (!this.audioBuffer) {
+        return new Response('Audio non trouvé', {
+          status: 404,
+          headers: { 'Access-Control-Allow-Origin': '*' },
+        })
+      }
+
+      const totalSize = this.audioBuffer.byteLength
+      const range = req.headers.get('range')
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-')
+        const start = parseInt(parts[0], 10)
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1
+        const chunk = this.audioBuffer.slice(start, end + 1)
+
+        return new Response(chunk, {
+          status: 206,
+          headers: {
+            'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunk.byteLength.toString(),
+            'Content-Type': this.audioMimeType,
+            'Access-Control-Allow-Origin': '*',
+          },
+        })
+      }
+
+      return new Response(this.audioBuffer, {
+        status: 200,
+        headers: {
+          'Content-Length': totalSize.toString(),
+          'Content-Type': this.audioMimeType,
+          'Accept-Ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*',
         },
       })
     }
@@ -282,6 +366,7 @@ export default class AudioSyncServer implements Party.Server {
         )
       } else if (data.type === 'audio-clear') {
         this.stopHeartbeat()
+        this.audioBuffer = null
         this.audioState = {
           url: null,
           name: null,
